@@ -24,9 +24,11 @@ def initDevice():
 
 # x, y, size
 def parseBlob(b):
-  x = b[0] + ((b[2] | 0x30) << 4)
-  y = b[1] + ((b[2] | 0xC0) << 2)
-  s = b[2] | 0x0F
+  if (b[0] == 0xff and b[1] == 0xff and b[2] == 0xff):
+    return None
+  x = b[0] + ((b[2] & 0x30) << 4)
+  y = b[1] + ((b[2] & 0xC0) << 2)
+  s = b[2] & 0x0F
   return (x, y, s)
 
 def sample(h):
@@ -35,8 +37,9 @@ def sample(h):
   (count, data1) = pi.i2c_read_device(h, 8)
   time.sleep(380/1000000)
   (count, data2) = pi.i2c_read_device(h, 4)
+  data = data1 + data2
 
-  return (parseBlob(data1[0:3]), parseBlob(data1[3:6]), parseBlob(data1[6:] + [data2[0]]), parseBlob(data2[1:]))
+  return (parseBlob(data[0:3]), parseBlob(data[3:6]), parseBlob(data[6:9]), parseBlob(data[9:12]))
 
 h = initDevice()
 while True:
