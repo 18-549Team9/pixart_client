@@ -2,11 +2,12 @@
 
 import time
 import pigpio
-DEV_ADDR = 0xB0
+DEV_ADDR = 0x58
 pi = pigpio.pi()
 
 def initDevice():
-  h = pi.i2c_open(0, DEV_ADDR)
+
+  h = pi.i2c_open(1, DEV_ADDR)
   pi.i2c_write_device(h, [0x30, 0x01])
   time.sleep(0.1)
   pi.i2c_write_device(h, [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x90])
