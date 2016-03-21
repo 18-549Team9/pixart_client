@@ -41,6 +41,11 @@ def sample(h):
 
   return (parseBlob(data[0:3]), parseBlob(data[3:6]), parseBlob(data[6:9]), parseBlob(data[9:12]))
 
+# Set pin 4 to a 25 MHz clock
+pi.hardware_clock(4, 20000000)
+
+# Set pin 17 to 1 to disable the active-low reset pin
+pi.set_mode(17, pigpio.OUTPUT)
+pi.write(17, 1)
+
 h = initDevice()
-while True:
-  print sample(h)
