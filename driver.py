@@ -3,12 +3,12 @@
 import time
 import pigpio
 import socket
+import multiprocessing
 
 DEV_ADDR = 0x58
 pi = pigpio.pi()
 
 def initDevice():
-
   h = pi.i2c_open(1, DEV_ADDR)
   pi.i2c_write_device(h, [0x30, 0x01])
   time.sleep(0.1)
@@ -24,6 +24,15 @@ def initDevice():
   time.sleep(0.1)
   return h
 
+def sampleToBuffer(outbytes):
+  while True:
+    pi.i2c_write_device(h, [0x37])
+    time.sleep(25/1000000)
+    (count, data1) = pi.i2c_read_device(h, 8)
+    time.sleep(380/1000000)
+    (count, data2) = pi.i2c_read_device(h, 4)
+    outbytes[:] = data1 + data2;
+
 # x, y, size
 def parseBlob(b):
   if (b[0] == 0xff and b[1] == 0xff and b[2] == 0xff):
@@ -33,15 +42,20 @@ def parseBlob(b):
   s = b[2] & 0x0F
   return (x, y, s)
 
-def sample(h):
-  pi.i2c_write_device(h, [0x37])
-  time.sleep(25/1000000)
-  (count, data1) = pi.i2c_read_device(h, 8)
-  time.sleep(380/1000000)
-  (count, data2) = pi.i2c_read_device(h, 4)
-  data = data1 + data2
+def streamFromBuffer(inbytes):
+  client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  client.bind(('', 56050))
+  (data, address) = client.recvfrom(4096)
+  print address
 
-  return (parseBlob(data[0:3]), parseBlob(data[3:6]), parseBlob(data[6:9]), parseBlob(data[9:12]))
+  i = 0;
+  while True:
+    data = inbytes[:]
+    s = (parseBlob(data[0:3]), parseBlob(data[3:6]), parseBlob(data[6:9]), parseBlob(data[9:12]))
+    client.sendto(str((i, s)) + '\n', address) 
+    print str((i, s))
+    i += 1;
+    time.sleep(0.01)
 
 # Set pin 4 to a 25 MHz clock
 pi.hardware_clock(4, 20000000)
@@ -53,28 +67,13 @@ pi.write(17, 1)
 # Initialize i2c camera
 h = initDevice()
 
-client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-client.bind(('0.0.0.0', 56050))
-print socket.gethostname()
-(data, address) = client.recvfrom(4096)
-print address
+# Begin sampling data from the camera
+bytes = multiprocessing.Array('i', 12)
+p = multiprocessing.Process(target=sampleToBuffer, args=(bytes,))
+p.start()
 
-def control():
-  pass
+# Wait for an incoming http connection
 
-def sample(outbytes):
-  pass
+server_address = ('', 80)
 
-def stream(inbytes):
-  pass
-i = 0;
-prevS = sample(h);
-while True:
-  t = time.clock()
-  s = sample(h);
-  while (s == prevS):
-    s = sample(h);
-  prevS = s;
-  client.sendto(str((i, s)) + '\n', address)
-  i += 1;
-  time.sleep(0.01)
+streamFromBuffer(bytes)
