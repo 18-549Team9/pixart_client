@@ -1,11 +1,16 @@
-#!/bin/python
+#!/usr/bin/python
 
 import time
 import pigpio
 import socket
 import multiprocessing
+import BaseHTTPServer
+import urlparse
 
 DEV_ADDR = 0x58
+STREAMING = 0
+STOPPING = 1
+STOPPED = 2
 pi = pigpio.pi()
 
 def initDevice():
@@ -42,20 +47,19 @@ def parseBlob(b):
   s = b[2] & 0x0F
   return (x, y, s)
 
-def streamFromBuffer(inbytes):
+def streamFromBuffer(inbytes, address, streamState):
   client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
   client.bind(('', 56050))
-  (data, address) = client.recvfrom(4096)
-  print address
 
   i = 0;
-  while True:
+  while streamState.value == STREAMING:
     data = inbytes[:]
     s = (parseBlob(data[0:3]), parseBlob(data[3:6]), parseBlob(data[6:9]), parseBlob(data[9:12]))
     client.sendto(str((i, s)) + '\n', address) 
     print str((i, s))
     i += 1;
     time.sleep(0.01)
+  streamState.value = STOPPED;
 
 # Set pin 4 to a 25 MHz clock
 pi.hardware_clock(4, 20000000)
@@ -68,12 +72,58 @@ pi.write(17, 1)
 h = initDevice()
 
 # Begin sampling data from the camera
-bytes = multiprocessing.Array('i', 12)
+bytes = multiprocessing.Array('i', range(12))
+streamState = multiprocessing.Value('i', STOPPED);
 p = multiprocessing.Process(target=sampleToBuffer, args=(bytes,))
 p.start()
 
-# Wait for an incoming http connection
+try:
+  # Wait for an incoming http connection
+  class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
+    def do_GET(self):
+      if self.path == '/status':
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
+        statuses = ['STREAMING', 'STOPPING', 'STOPPED']
+        self.wfile.write('status is ' + statuses[streamState.value])
+      else:
+        self.send_response(404)
+        self.end_headers()
 
-server_address = ('', 80)
+    def do_POST(self):
+      length = int(self.headers.getheader('content-length'))
+      field_data = self.rfile.read(length)
+      fields = urlparse.parse_qs(field_data)
 
-streamFromBuffer(bytes)
+      if self.path == '/start':
+        if 'ip' in fields and 'port' in fields:
+          self.startStreaming((fields['ip'], fields['port']))
+          self.send_response(200)
+          return
+      elif self.path == '/stop':
+        self.stopStreaming()
+        self.send_response(200)
+        return
+
+      self.send_response(404)
+
+    def startStreaming(self, host):
+      address = (host[0][0], int(host[1][0]))
+      if streamState.value == STOPPED:
+        streamState.value = STREAMING
+        q = multiprocessing.Process(target=streamFromBuffer, args=(bytes,address,streamState))
+        q.start()
+
+    def stopStreaming(self):
+      if (streamState.value == STREAMING):
+        streamState.value = STOPPING;
+
+  server = BaseHTTPServer.HTTPServer(('', 80), Handler)
+  server.serve_forever()
+except KeyboardInterrupt:
+  server.socket.close()
+
+def test():
+  while True:
+    pass
