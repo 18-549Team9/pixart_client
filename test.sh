@@ -2,6 +2,9 @@
 
 # put clk on gpio 4, rst on gpio17
 
+# Allow hostname discovery 
+apt-get install avahi-daemon avahi-discover libnss-mdns
+
 # enable i2c
 cat /etc/modprobe.d/raspi-blacklist.conf |
 grep -v 'blacklist i2c-bcm2708' >

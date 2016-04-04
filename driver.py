@@ -2,6 +2,8 @@
 
 import time
 import pigpio
+import socket
+
 DEV_ADDR = 0x58
 pi = pigpio.pi()
 
@@ -48,4 +50,31 @@ pi.hardware_clock(4, 20000000)
 pi.set_mode(17, pigpio.OUTPUT)
 pi.write(17, 1)
 
+# Initialize i2c camera
 h = initDevice()
+
+client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+client.bind(('0.0.0.0', 56050))
+print socket.gethostname()
+(data, address) = client.recvfrom(4096)
+print address
+
+def control():
+  pass
+
+def sample(outbytes):
+  pass
+
+def stream(inbytes):
+  pass
+i = 0;
+prevS = sample(h);
+while True:
+  t = time.clock()
+  s = sample(h);
+  while (s == prevS):
+    s = sample(h);
+  prevS = s;
+  client.sendto(str((i, s)) + '\n', address)
+  i += 1;
+  time.sleep(0.01)
