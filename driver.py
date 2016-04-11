@@ -81,9 +81,7 @@ def streamFromBuffer(inbytes, address, streamState):
     i = 0;
     while streamState.value == STREAMING:
       data = inbytes[:]
-      s = (parseBlob(data[0:3]), parseBlob(data[3:6]), parseBlob(data[6:9]), parseBlob(data[9:12]))
-      client.sendto(str((i, s)) + '\n', address)
-      print str((i, s))
+      client.sendto(str([i] + data) + '\n', address)
       i += 1;
       time.sleep(0.01)
   except (KeyboardInterrupt, SystemExit):
