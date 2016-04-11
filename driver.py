@@ -1,5 +1,7 @@
 #!/usr/bin/python
 
+import signal
+import sys
 import time
 import pigpio
 import socket
@@ -52,6 +54,8 @@ def sampleToBuffer(outbytes):
         time.sleep(380/1000000)
         (count, data2) = pi.i2c_read_device(h, 4)
         outbytes[:] = data1 + data2;
+    except (KeyboardInterrupt, SystemExit):
+      raise
     except:
       pass
 
@@ -67,8 +71,6 @@ def parseBlob(b):
 # Begin sampling data from the camera to these bytes
 bytes = multiprocessing.Array('i', 12 * [-1])
 streamState = multiprocessing.Value('i', STOPPED);
-p = multiprocessing.Process(target=sampleToBuffer, args=(bytes, ))
-p.start()
 
 # Streams data from the buffer to the input address
 def streamFromBuffer(inbytes, address, streamState):
@@ -84,6 +86,8 @@ def streamFromBuffer(inbytes, address, streamState):
       print str((i, s))
       i += 1;
       time.sleep(0.01)
+  except (KeyboardInterrupt, SystemExit):
+    raise
   except:
     pass
 
@@ -107,6 +111,8 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
       length = int(self.headers.getheader('content-length'))
       field_data = self.rfile.read(length)
       fields = urlparse.parse_qs(field_data)
+    except (KeyboardInterrupt, SystemExit):
+      raise
     except:
       self.send_response(400) # bad request
       return
@@ -134,6 +140,8 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
         q = multiprocessing.Process(target=streamFromBuffer, args=(bytes,address,streamState))
         q.start()
         return True
+    except (KeyboardInterrupt, SystemExit):
+      raise
     except:
       pass
     return False
@@ -142,10 +150,24 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
     if (streamState.value == STREAMING):
       streamState.value = STOPPING;
 
-# Wait for an incoming http connection
-while True:
-  try:
-    server = BaseHTTPServer.HTTPServer(('', 80), Handler)
-    server.serve_forever()
-  except:
-    server.socket.close()
+def runServer():
+  while True:
+    try:
+      server = BaseHTTPServer.HTTPServer(('', 80), Handler)
+      server.serve_forever()
+    except (KeyboardInterrupt, SystemExit):
+      raise
+    except:
+      server.socket.close();
+
+def handleSigTerm(signal, frame):
+  print 'got SIGTERM'
+  sys.exit(0);
+
+signal.signal(signal.SIGTERM, handleSigTerm)
+
+# Start server
+p = multiprocessing.Process(target=runServer, args=())
+p.start()
+
+sampleToBuffer();
