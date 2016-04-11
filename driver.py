@@ -16,7 +16,7 @@ pi = pigpio.pi()
 # Configures GPIO pins to work with the camera
 def initDevice():
   # Set pin 4 to a 25 MHz clock
-  pi.hardware_clock(4, 20000000)
+  pi.hardware_clock(4, 25000000)
 
   # Set pin 17 to 0 to reset the camera as an active-low reset pin
   pi.set_mode(17, pigpio.OUTPUT)
@@ -41,7 +41,7 @@ def initDevice():
   return h
 
 # Samples data from input device to the buffer
-def sampleToBuffer(h, outbytes):
+def sampleToBuffer(outbytes):
   while True:
     try:
       h = initDevice()
@@ -63,6 +63,12 @@ def parseBlob(b):
   y = b[1] + ((b[2] & 0xC0) << 2)
   s = b[2] & 0x0F
   return (x, y, s)
+
+# Begin sampling data from the camera to these bytes
+bytes = multiprocessing.Array('i', 12 * [-1])
+streamState = multiprocessing.Value('i', STOPPED);
+p = multiprocessing.Process(target=sampleToBuffer, args=(bytes, ))
+p.start()
 
 # Streams data from the buffer to the input address
 def streamFromBuffer(inbytes, address, streamState):
@@ -136,21 +142,10 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
     if (streamState.value == STREAMING):
       streamState.value = STOPPING;
 
-def main():
-
-  # Begin sampling data from the camera to these bytes
-  bytes = multiprocessing.Array('i', range(12))
-  streamState = multiprocessing.Value('i', STOPPED);
-  p = multiprocessing.Process(target=sampleToBuffer, args=(h, bytes))
-  p.start()
-
 # Wait for an incoming http connection
-  while True:
-    try:
-      server = BaseHTTPServer.HTTPServer(('', 12345), Handler)
-      server.serve_forever()
-    except:
-      server.socket.close()
-
-if __name__ == '__main__':
-  main()
+while True:
+  try:
+    server = BaseHTTPServer.HTTPServer(('', 80), Handler)
+    server.serve_forever()
+  except:
+    server.socket.close()
