@@ -62,15 +62,11 @@ def sampleToBuffer(outbytes):
 # Parses a 3 byte blob into a tuple of x, y, and size
 def parseBlob(b):
   if (b[0] == 0xff and b[1] == 0xff and b[2] == 0xff):
-    return None
+    return [-1, -1, -1]
   x = b[0] + ((b[2] & 0x30) << 4)
   y = b[1] + ((b[2] & 0xC0) << 2)
   s = b[2] & 0x0F
-  return (x, y, s)
-
-# Begin sampling data from the camera to these bytes
-bytes = multiprocessing.Array('i', 12 * [-1])
-streamState = multiprocessing.Value('i', STOPPED);
+  return [x, y, s]
 
 # Streams data from the buffer to the input address
 def streamFromBuffer(inbytes, address, streamState):
@@ -81,7 +77,9 @@ def streamFromBuffer(inbytes, address, streamState):
     i = 0;
     while streamState.value == STREAMING:
       data = inbytes[:]
-      client.sendto(str([i] + data) + '\n', address)
+      packet = parseBlob(data[0:3]) + parseBlob(data[3:6])
+      packet += parseBlob(data[6:9]) + parseBlob(data[9:12])
+      client.sendto(str([i] + packet) + '\n', address)
       i += 1;
       time.sleep(0.01)
   except (KeyboardInterrupt, SystemExit):
@@ -91,6 +89,10 @@ def streamFromBuffer(inbytes, address, streamState):
 
   client.close()
   streamState.value = STOPPED;
+
+# Begin sampling data from the camera to these bytes
+bytes = multiprocessing.Array('i', 12 * [-1])
+streamState = multiprocessing.Value('i', STOPPED);
 
 class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
   def do_GET(self):
@@ -155,8 +157,6 @@ def runServer():
       server.serve_forever()
     except (KeyboardInterrupt, SystemExit):
       raise
-    except:
-      server.socket.close();
 
 def handleSigTerm(signal, frame):
   print 'got SIGTERM'
@@ -168,4 +168,4 @@ signal.signal(signal.SIGTERM, handleSigTerm)
 p = multiprocessing.Process(target=runServer, args=())
 p.start()
 
-sampleToBuffer();
+sampleToBuffer(bytes);
