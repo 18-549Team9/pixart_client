@@ -72,7 +72,6 @@ def parseBlob(b):
 def streamFromBuffer(inbytes, address, streamState):
   try:
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    client.bind(('', 0))
 
     i = 0;
     while streamState.value == STREAMING:
@@ -90,7 +89,7 @@ def streamFromBuffer(inbytes, address, streamState):
   client.close()
   streamState.value = STOPPED;
 
-# Begin sampling data from the camera to these bytes
+# Create values for stream sampling
 bytes = multiprocessing.Array('i', 12 * [-1])
 streamState = multiprocessing.Value('i', STOPPED);
 
@@ -157,6 +156,21 @@ def runServer():
       server.serve_forever()
     except (KeyboardInterrupt, SystemExit):
       raise
+    except:
+      pass
+
+def runPort():
+  while True:
+    try:
+      client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+      client.bind(('', 4507))
+      while True:
+        data, addr = client.recvfrom(1024);
+        client.sendto(data, addr)
+    except (KeyboardInterrupt, SystemExit):
+      raise
+    except:
+      pass
 
 def handleSigTerm(signal, frame):
   print 'got SIGTERM'
@@ -168,4 +182,9 @@ signal.signal(signal.SIGTERM, handleSigTerm)
 p = multiprocessing.Process(target=runServer, args=())
 p.start()
 
+# Start discovery
+q = multiprocessing.Process(target=runPort, args=())
+q.start()
+
+# Start sampling to buffer
 sampleToBuffer(bytes);
