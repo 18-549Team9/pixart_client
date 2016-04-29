@@ -13,6 +13,8 @@ DEV_ADDR = 0x58
 STREAMING = 0
 STOPPING = 1
 STOPPED = 2
+sampleFrequency = 100
+samplePeriod = 1/sampleFrequency
 pi = pigpio.pi()
 
 # Configures GPIO pins to work with the camera
@@ -74,13 +76,17 @@ def streamFromBuffer(inbytes, address, streamState):
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     i = 0;
+    nextTime = time.time();
     while streamState.value == STREAMING:
       data = inbytes[:]
       packet = parseBlob(data[0:3]) + parseBlob(data[3:6])
       packet += parseBlob(data[6:9]) + parseBlob(data[9:12])
       client.sendto(str([i] + packet) + '\n', address)
       i += 1;
-      time.sleep(0.01)
+      nextTime += samplePeriod;
+      sleepTime = nextTime - time.time();
+      if (sleepTime > 0):
+        time.sleep(samplePeriod*i + startTime - time.time());
   except (KeyboardInterrupt, SystemExit):
     raise
   except:
