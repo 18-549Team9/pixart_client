@@ -14,7 +14,6 @@ STREAMING = 0
 STOPPING = 1
 STOPPED = 2
 sampleFrequency = 100
-samplePeriod = 1/sampleFrequency
 pi = pigpio.pi()
 
 # Configures GPIO pins to work with the camera
@@ -71,8 +70,9 @@ def parseBlob(b):
   return [x, y, s]
 
 # Streams data from the buffer to the input address
-def streamFromBuffer(inbytes, address, streamState):
+def streamFromBuffer(inbytes, address, streamState, samplePeriod):
   try:
+    samplePeriod = 1/sampleFrequency
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     i = 0;
@@ -128,6 +128,8 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
     elif self.path == '/stop':
       success = True
       self.stopStreaming()
+    elif self.path == '/set_rate':
+      success = self.setSampleRate(fields)
     else:
       self.send_response(404) # not found
 
@@ -142,7 +144,7 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
       address = (fields['ip'][0], int(fields['port'][0]))
       if streamState.value == STOPPED:
         streamState.value = STREAMING
-        q = multiprocessing.Process(target=streamFromBuffer, args=(bytes,address,streamState))
+        q = multiprocessing.Process(target=streamFromBuffer, args=(bytes,address,streamState,sampleFrequency))
         q.start()
         return True
     except (KeyboardInterrupt, SystemExit):
@@ -154,6 +156,15 @@ class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
   def stopStreaming(self):
     if (streamState.value == STREAMING):
       streamState.value = STOPPING;
+
+  def setSampleRate(self, fields):
+    try:
+      sampleFrequency = fields['frequency'][0]
+    except (KeyboardInterrupt, SystemExit):
+      raise
+    except:
+      pass
+    return False
 
 def runServer():
   while True:
